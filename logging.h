@@ -1,4 +1,4 @@
-#define FILENAME "/tmp/MemoryDaemon.log"
+#define LOG_FILENAME "/tmp/MemoryDaemon.log"
 
 void logger(char *data)
 {
@@ -9,7 +9,7 @@ void logger(char *data)
     t = time(NULL);
 
     ltime = strtok(ctime(&t), "\n");
-    fd = fopen(FILENAME, "a");
+    fd = fopen(LOG_FILENAME, "a");
     fprintf(fd, "%s :: %s\n", ltime, data);
     fclose(fd);
     bzero((void *)data, sizeof(data));

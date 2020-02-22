@@ -38,11 +38,12 @@ char *logdata;
 #include <sys/fcntl.h>
 
 pthread_mutex_t lock;
+#include "logging.h"
 
 //Custom Header files(Low Level)
-
+#include "file_management_low.h"
 
 //Custom Header files(Med Level
-#include "logging.h"
+
 
 #endif // HEADERS_H_INCLUDED

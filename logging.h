@@ -1,7 +1,12 @@
-#define LOG_FILENAME "/tmp/MemoryDaemon.log"
+#define LOG_FILENAME "/var/AIDB/MemoryDaemon.log"
 
-void logger(char *data)
+void logger(char *data, int mode)
 {
+    if(DEBUG_ENABLED == FALSE && mode == DEBUG)
+    {
+            return;
+    }
+
     pthread_mutex_lock(&lock);
     time_t t;
     char *ltime;
@@ -10,7 +15,18 @@ void logger(char *data)
 
     ltime = strtok(ctime(&t), "\n");
     fd = fopen(LOG_FILENAME, "a");
-    fprintf(fd, "%s :: %s\n", ltime, data);
+
+    char a[5];
+    if(mode == INFO)
+        strcpy(a, "INFO");
+    else if(mode == ERROR)
+        strcpy(a, "ERROR");
+    else if(mode == DEBUG)
+        strcpy(a, "DEBUG");
+    else
+        strcpy(a, " ");
+
+    fprintf(fd, "%s :: %s :: %s\n", ltime, a, data);
     fclose(fd);
     bzero((void *)data, sizeof(data));
 

@@ -1,26 +1,32 @@
 #ifndef HEADERS_H_INCLUDED
 #define HEADERS_H_INCLUDED
 
-#define INITIAL 99
 #define YES 1
 #define NO 0
 #define TRUE 1
 #define FALSE 0
 #define SUCCESS 1
 #define FAILURE 0
-#define MODIFIED 2
-#define BUSY 2
 #define LOGSIZE 1000
 #define KEEPALIVE_TIMEOUT 10
 #define SOCKET_TIMEOUT_RECV 10
 #define SOCKET_TIMEOUT_SEND 10
+#define FILENAME_SIZE 10
+#define FILEPATH_SIZE 50
+#define ROOT_STORAGE "/var/AIDB/"
+#define READ "rb"
+#define WRITE "wb+"
+#define INFO 1
+#define ERROR 2
+#define DEBUG 3
+#define DEBUG_ENABLED TRUE
 char *logdata;
-
 
 //Builtin Header files
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -36,14 +42,18 @@ char *logdata;
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/fcntl.h>
+//#include "SHA384_512.h"
+
 
 pthread_mutex_t lock;
 #include "logging.h"
 
 //Custom Header files(Low Level)
 #include "file_management_low.h"
+#include "database_format_low.h"
 
 //Custom Header files(Med Level
+#include "file_management_med.h"
 
 
 #endif // HEADERS_H_INCLUDED

@@ -1,6 +1,11 @@
 #define MAX_COLUMNS 1000
 #define MAX_ROWS 1000
 
+struct column_type
+{
+    char column_datatype[15];
+    char column_mode[15];
+};
 
 struct rows
 {
@@ -21,17 +26,25 @@ struct table
 {
     ROW *rows[MAX_ROWS];
     char name[15];
+    char table_type[15];
     int total_rows;
     int total_column;
+    struct column_type *c_type[];
 };
 
 typedef struct table TABLE;
 
-TABLE *initialize_table(char name[])
+TABLE *initialize_table(char name[], int total_column)
 {
-    TABLE *t = (TABLE *)malloc(sizeof(TABLE));
+    TABLE *t = (TABLE *)malloc(sizeof(TABLE) + sizeof(ROW) + sizeof(struct column_type));
+    int i;
     t->total_rows = 0;
+    t->total_column = total_column;
     strcpy(t->name, name);
+    for(i = 0; i < total_column; i++)
+    {
+        t->c_type[i] = (struct column_type *)malloc(sizeof(struct column_type));
+    }
     sprintf(logdata, "Initialized table %s successfully.", t->name);
     logger(logdata, DEBUG);
     return t;
@@ -89,12 +102,11 @@ void add_row_in_table(TABLE *t, ROW *r)
 
 void delete_row_in_table(TABLE *t, int row_position)
 {
-    int i;
+    int i, column_count;
 
     sprintf(logdata, "Deleting the row with index: %d.", row_position);
     logger(logdata, DEBUG);
     ROW *temp_row = t->rows[row_position];
-    printf("Deleting row : %s.\n", temp_row->cell_data[0]);
 
     for(i = row_position; i < t->total_rows - 1; i++)
     {
@@ -102,6 +114,11 @@ void delete_row_in_table(TABLE *t, int row_position)
     }
 
     t->total_rows -= 1;
+
+    for(column_count=0; column_count < t->total_column; column_count++)
+    {
+        free(temp_row->cell_data[column_count]);
+    }
     free(temp_row);
     sprintf(logdata, "Deleted the row with index: %d.", row_position);
     logger(logdata, DEBUG);
@@ -133,11 +150,6 @@ void delete_multiple_rows_in_table(TABLE *t, int row_position[], size_t num)
         }
     }
 
-    for(c = 0; c < num; c++)
-    {
-        printf("%d , ", row_position[c]);
-    }
-
     c = 0;
     c_temp = 0;
     size_t size_q = num;
@@ -158,4 +170,21 @@ void delete_multiple_rows_in_table(TABLE *t, int row_position[], size_t num)
                 row_position[c_temp]--;
             }
     }
+}
+
+void deinitialize_table(TABLE *t)
+{
+    int column_count, row_count, row_num = 0;
+    int total_rows = t->total_rows;
+    for(row_count = 0; row_count < total_rows; row_count++)
+    {
+        delete_row_in_table(t, row_num);
+    }
+
+    for(column_count = 0; column_count < t->total_column; column_count++)
+    {
+        free(t->c_type[column_count]);
+    }
+
+    free(t);
 }

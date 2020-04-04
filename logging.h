@@ -2,7 +2,7 @@
 
 void logger(char *data, int mode)
 {
-    if(DEBUG_ENABLED == FALSE && mode == DEBUG)
+    if(DEBUG_ENABLED == FALSE && (mode == DEBUG || mode == CONSOLE))
     {
             return;
     }
@@ -23,8 +23,19 @@ void logger(char *data, int mode)
         strcpy(a, "ERROR");
     else if(mode == DEBUG)
         strcpy(a, "DEBUG");
+    else if(mode == CONSOLE)
+    {
+
+        printf("%s", data);
+        fclose(fd);
+        bzero((void *)data, sizeof(data));
+        pthread_mutex_unlock(&lock);
+        return;
+    }
     else
+    {
         strcpy(a, " ");
+    }
 
     fprintf(fd, "%s :: %s :: %s\n", ltime, a, data);
     fclose(fd);

@@ -16,10 +16,13 @@
 #define ROOT_STORAGE "/var/AIDB/"
 #define READ "rb"
 #define WRITE "wb+"
+#define CONSOLE 0
 #define INFO 1
 #define ERROR 2
 #define DEBUG 3
 #define DEBUG_ENABLED TRUE
+#define TABLE_TYPE 1
+#define NODE_TYPE 2
 char *logdata;
 
 //Builtin Header files
@@ -53,7 +56,8 @@ pthread_mutex_t lock;
 #include "file_management_low.h"
 #include "database_format_low.h"
 
-//Custom Header files(Med Level
+//Custom Header files(Med Level)
+#include "file_database_integration.h"
 
 
 #endif // HEADERS_H_INCLUDED

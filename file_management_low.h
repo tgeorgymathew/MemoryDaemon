@@ -10,6 +10,7 @@ int __write(char *filepath, char *data)
         logger(logdata, ERROR);
         return FAILURE;
     }
+
     if(fprintf(fd, "%s", data) < 0)
     {
         sprintf(logdata, "Unable to write to file. Path: %s", filepath);
@@ -17,7 +18,7 @@ int __write(char *filepath, char *data)
         return FAILURE;
     }
     fclose(fd);
-    bzero((void *)data, sizeof(data));
+//    bzero((void *)data, sizeof(data));
     return SUCCESS;
 }
 
@@ -43,13 +44,13 @@ int __read(char *filename, char *data)
 }
 
 
-void __set_name(char *name)
-{
-    long int rand = random();
-    char *data = (char *)malloc(10);
-    sprintf(name, "%p-%ld", data, rand);
-    free(data);
-}
+//void __set_name(char *name)
+//{
+//    long int rand = random();
+//    char *data = (char *)malloc(10);
+//    sprintf(name, "%p-%ld", data, rand);
+//    free(data);
+//}
 
 int __access_file_status(char *filepath, int mode)
 {
@@ -82,43 +83,100 @@ int __access_file_status(char *filepath, int mode)
     return status;
 }
 
-char *create_file(char *data)
-{
-    char *filename = (char *)malloc(FILENAME_SIZE);
-    char *filepath = (char *)malloc(FILEPATH_SIZE);
 
-    while(1)
+int create_folder(char *folder_name)
+{
+    sprintf(logdata, "Creating the folder '%s'.", folder_name);
+    logger(logdata, DEBUG);
+    int status = mkdir(folder_name, 0777);
+
+    if(status == -1)
     {
-        __set_name(filename);
-        sprintf(filepath, "%s%s", ROOT_STORAGE, filename);
-        sprintf(logdata, "File name is '%s'", filepath);
+        sprintf(logdata, "The folder '%s' could not be created. Reason: %s", folder_name, strerror(errno));
         logger(logdata, DEBUG);
-        if (access(filepath, F_OK) == 0)
-        {
-            sprintf(logdata, "The filepath '%s' already exist.", filepath);
-            logger(logdata, DEBUG);
-            sprintf(logdata, "Recreating the file name.");
-            logger(logdata, DEBUG);
-        }
-        else
-        {
-            if (__write(filepath, data) == FAILURE)
-            {
-                free(filename);
-                free(filepath);
-                return FAILURE;
-            }
-            else
-            {
-                sprintf(logdata, "File name '%s' is added.", filepath);
-                logger(logdata, INFO);
-                break;
-            }
-        }
+        return FAILURE;
     }
 
+    sprintf(logdata, "The folder '%s' created successfully.", folder_name);
+    logger(logdata, DEBUG);
+    return SUCCESS;
+}
+
+int create_database(char *name)
+{
+    char *folder_name = (char *)malloc(sizeof(ROOT_STORAGE) + 15);
+
+    //Creating Database folder
+    sprintf(folder_name, "%s%s", ROOT_STORAGE, name);
+    int status = create_folder(folder_name);
+
+    //Creating the table type in the Data folder
+    char *type_path = (char *)malloc(strlen(folder_name) + 8);
+    sprintf(type_path, "%s/TABLE", folder_name);
+    status = create_folder(type_path);
+
+    //Creating the node type in the Data folder
+    sprintf(type_path, "%s/Node", folder_name);
+    status = create_folder(type_path);
+
+    free(type_path);
+    free(folder_name);
+    return status;
+}
+
+int create_type(char *database, int type, char *name)
+{
+    char *folder_name = (char *)malloc(strlen(ROOT_STORAGE) + 70);
+    if(type == TABLE_TYPE)
+        sprintf(folder_name, "%s%s/TABLE/%s", ROOT_STORAGE, database, name);
+    else if(type == NODE_TYPE)
+        sprintf(folder_name, "%s%s/NODE/%s", ROOT_STORAGE, database, name);
+    int status = create_folder(folder_name);
+    sprintf(folder_name, "%s/Data", folder_name);
+    status = create_folder(folder_name);
+
+    free(folder_name);
+    return status;
+}
+
+int create_file(char *Database_path, char *data)
+{
+//    char *filename = (char *)malloc(FILENAME_SIZE);
+    char *filepath = (char *)malloc(strlen(ROOT_STORAGE) + strlen(Database_path) + 1);
+
+//    while(1)
+//    {
+//        __set_name(filename);
+    sprintf(filepath, "%s%s", ROOT_STORAGE, Database_path);
+    sprintf(logdata, "File name is '%s'", filepath);
+    logger(logdata, DEBUG);
+    if (__access_file_status(filepath, F_OK) == 0)
+    {
+        sprintf(logdata, "The filepath '%s' already exist.", filepath);
+        logger(logdata, DEBUG);
+        sprintf(logdata, "Recreating the file name.");
+        logger(logdata, DEBUG);
+    }
+//    else
+//    {
+
+    if (__write(filepath, data) == FAILURE)
+    {
+//        free(filename);
+        free(filepath);
+        return FAILURE;
+    }
+    else
+    {
+        sprintf(logdata, "File name '%s' is added.", filepath);
+        logger(logdata, INFO);
+//        break;
+    }
+//    }
+//    }
+
     free(filepath);
-    return filename;
+    return SUCCESS;
 }
 
 int modify_file(char *filename, char *data)

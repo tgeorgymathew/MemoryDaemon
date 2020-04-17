@@ -34,6 +34,14 @@ struct table
 
 typedef struct table TABLE;
 
+struct node_t
+{
+    int a;
+};
+
+typedef struct node_t NODE;
+
+
 TABLE *initialize_table(char name[], int total_column)
 {
     TABLE *t = (TABLE *)malloc(sizeof(TABLE) + sizeof(ROW) + sizeof(struct column_type));
@@ -59,7 +67,7 @@ void table_print(TABLE *t)
         j=0;
         while(1)
         {
-            if(j < t->rows[i]->total_columns)
+            if(j < t->total_column)
             {
                 printf("%d-%d : %s\t", i, j ,t->rows[i]->cell_data[j]);
                 j++;
@@ -72,20 +80,17 @@ void table_print(TABLE *t)
     }
 }
 
-ROW *create_row(int num, ...)
+ROW *create_row(int num, char **data)
 {
-    va_list valist;
     int i;
     ROW *row = initialize_row();
 
-    row->total_columns = num;
-    va_start(valist, num);
-
     for(i=0; i<num; i++)
     {
-        row->cell_data[i] = va_arg(valist, char *);
+        row->cell_data[i] = (char *)malloc(strlen(data[i]) + 1);
+        strcpy(row->cell_data[i], data[i]);
+        free(data[i]);
     }
-
     sprintf(logdata, "Created row successfully.");
     logger(logdata, DEBUG);
     return row;

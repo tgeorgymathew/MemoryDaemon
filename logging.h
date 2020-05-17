@@ -7,6 +7,7 @@ void logger(char *data, int mode)
             return;
     }
 
+    pthread_mutex_init(&lock, NULL);
     pthread_mutex_lock(&lock);
     time_t t;
     char *ltime;
@@ -37,7 +38,7 @@ void logger(char *data, int mode)
         strcpy(a, " ");
     }
 
-    fprintf(fd, "%s :: %s :: %s\n", ltime, a, data);
+    fprintf(fd, "%s :: %d :: %s :: %s\n", ltime, getpid(), a, data);
     fclose(fd);
     bzero((void *)data, sizeof(data));
 

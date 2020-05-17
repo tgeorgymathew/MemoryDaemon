@@ -1,11 +1,85 @@
 
+//Library to add memory data to the file.
+int create_file_wth_struct_args(void *args_d)
+{
+    struct arguments
+    {
+        char *arg_1, *arg_2;
+    };
+    struct arguments *args = (struct arguments *)args_d;
+    int status = create_file(args->arg_1, args->arg_2);
+    free(args->arg_1);
+    free(args->arg_2);
+    free(args);
+    return status;
+}
+
+//void __memory_table_to_file(char *database, TABLE *t)
+//{
+//    int row_count, column_count, status;
+//    char *data, *column_name, *database_path;
+//    int data_size = MAX_CELL_SIZE * t->total_rows;
+//    int column_name_size = 200;
+//    pid_t child_pid;
+//
+//    //Creating the database folder and table structure
+//    create_database(database);
+//    create_type(database, TABLE_TYPE, t->name);
+//
+//    database_path = get_table_path(database, t->name);
+//    sprintf(logdata, "The table written to %s.\n", database_path);
+//    logger(logdata, CONSOLE);
+
+    //Parsing the Data that needs to be written to the file.
+//    for(column_count = 0; column_count < t->total_column; column_count++)
+//    {
+//        data = (char *)malloc(data_size);
+//        column_name = (char *)malloc(column_name_size);
+//        for(row_count = 0; row_count < t->total_rows; row_count++)
+//        {
+//            if(row_count == 0)
+//                sprintf(data, "%s", t->rows[row_count]->cell_data[column_count]);
+//            else
+//                sprintf(data, "%s\n%s", data, t->rows[row_count]->cell_data[column_count]);
+//
+//        }
+//        sprintf(column_name, "%s/Data/column_%d", database_path, column_count);
+//        child_pid = fork();
+//        if(child_pid == 0)
+//        {
+//            status = create_file(column_name, data);
+//            if(status == FAILURE)
+//            {
+//                sprintf(logdata, "Exiting the program because create_file function failed.");
+//                logger(logdata, ERROR);
+//                exit(FAILURE);
+//            }
+//            sprintf(logdata, "Modified for the column in file : %s\n", column_name);
+//            logger(logdata, DEBUG);
+//            exit(SUCCESS);
+//        }
+//        bzero(data, data_size);
+//        free(column_name);
+//        free(data);
+//    }
+//    wait(NULL);
+//    free(database_path);
+//}
 
 void __memory_table_to_file(char *database, TABLE *t)
 {
     int row_count, column_count, status;
     char *data, *column_name, *database_path;
-    int data_size = 100000;
+    int data_size = MAX_CELL_SIZE * t->total_rows;
     int column_name_size = 200;
+    pthread_t thread_id[t->total_column];
+    pid_t child_pid;
+
+    struct arguments
+    {
+        char *arg_1, *arg_2;
+    };
+    struct arguments *args;
 
     //Creating the database folder and table structure
     create_database(database);
@@ -15,11 +89,12 @@ void __memory_table_to_file(char *database, TABLE *t)
     sprintf(logdata, "The table written to %s.\n", database_path);
     logger(logdata, CONSOLE);
 
-    //Parsing the Data written to the file.
+    //Parsing the Data that needs to be written to the file.
     for(column_count = 0; column_count < t->total_column; column_count++)
     {
         data = (char *)malloc(data_size);
         column_name = (char *)malloc(column_name_size);
+        args = (struct arguments *)malloc(sizeof(struct arguments));
         for(row_count = 0; row_count < t->total_rows; row_count++)
         {
             if(row_count == 0)
@@ -29,28 +104,51 @@ void __memory_table_to_file(char *database, TABLE *t)
 
         }
         sprintf(column_name, "%s/Data/column_%d", database_path, column_count);
-        status = create_file(column_name, data);
-        if(status == FAILURE)
+
+        args->arg_1 = column_name;
+        args->arg_2 = data;
+        child_pid = fork();
+        if(child_pid == 0)
         {
-            sprintf(logdata, "Exiting the program because create_file function failed.");
+            pthread_create(&thread_id[column_count], NULL, (void *)create_file_wth_struct_args, (void *)args);
+            pthread_join(thread_id[column_count], (void *)&status);
+    //        status = create_file(column_name, data);
+            if(status == FAILURE)
+            {
+                sprintf(logdata, "Exiting the program because create_file function failed. Reason: %s.", strerror(errno));
+                logger(logdata, ERROR);
+                exit(FAILURE);
+            }
+            sprintf(logdata, "Modified for the column in file : column_%d\n", column_count);
+            logger(logdata, DEBUG);
+            exit(SUCCESS);
+        }
+        else if(child_pid < 0)
+        {
+            sprintf(logdata, "Child process creation failed and hence closing the program.. Reason: %s.", strerror(errno));
             logger(logdata, ERROR);
             exit(FAILURE);
         }
-        sprintf(logdata, "Modified for the column in file : %s\n", column_name);
-        logger(logdata, DEBUG);
         bzero(data, data_size);
-        free(column_name);
         free(data);
+        free(column_name);
+        free(args);
+
     }
+
+    while(waitpid(0, &status, 0) >= 0);
     free(database_path);
 }
 
+//Create table/node specific configuration file.
 void __create_config_file(char *database, void *tn, int type)
 {
     char *database_path, *temp_data, *column_data;
     int status, column_count;
     long int name_size = 100000;
     TABLE *t;
+
+    //Create table configuration file.
     if(type == TABLE_TYPE)
     {
         t = (TABLE *)tn;
@@ -80,10 +178,13 @@ void __create_config_file(char *database, void *tn, int type)
     free(column_data);
 }
 
+//Add the table and configuration data into the file.
 void add_memory_to_file(char *database, void *t, int type)
 {
     TABLE *tab;
     NODE *nod;
+    int status;
+    char *logdata = (char *)malloc(LOGSIZE);
 
     if(type == TABLE_TYPE)
     {
@@ -91,42 +192,68 @@ void add_memory_to_file(char *database, void *t, int type)
         __memory_table_to_file(database, tab);
         __create_config_file(database, tab, type);
     }
-}
-
-int remove_database_table(char *database, void *t, int type)
-{
-    TABLE *tab;
-    NODE *nod;
-    int i;
-    int total_column;
-    char *col_name;
-
-    if(type == TABLE_TYPE)
+    else if(type==NODE_TYPE)
     {
-        tab = (TABLE *)t;
-        total_column = tab->total_column;
+        nod = (NODE *)t;
 
-        //Delete all the column files and parent folder..
-        for(i = 0; i < total_column; i++)
+        char *io = (char *)malloc(sizeof(long int) + 1);
+        sprintf(io, "%ld", nod->name);
+//        printf("Node name is %s\n", io);
+        status = create_type("Georgy_DB", NODE_TYPE, io);
+        if(status == FAILURE)
         {
-            col_name = (char *)malloc(20);
-            sprintf(col_name, "column_%d", i);
-            if (delete_column(database, tab->name, col_name) == FAILURE)
-                return FAILURE;
-            free(col_name);
+            sprintf(logdata, "Failed to write the data in the file. Node name is %ld.", nod->name);
+            logger(logdata, ERROR);
+            free(logdata);
+            exit(FAILURE);
         }
 
-        if(delete_table_files(database, tab->name) == FAILURE)
-            return FAILURE;
-        if(delete_table(database, tab->name) == FAILURE)
-            return FAILURE;
+        char *node_path = get_node_path("Georgy_DB", io);
+        char *file_path = (char *)malloc(strlen(node_path) + strlen(io) + PATH_EXTRA_SIZE);
+        sprintf(file_path, "%s/Data/content", node_path);
+        status = create_file(file_path, nod->data);
+        free(file_path);
 
-        //Deintialize the table in the memory
-        deinitialize_table(t);
+        file_path = (char *)malloc(strlen(node_path) + PATH_EXTRA_SIZE);
+        sprintf(file_path, "%s/node.config", node_path);
+        char *data = (char *)malloc(1000);
+
+        if(nod == nod->root_link)
+            sprintf(data, "TYPE\t%d\nROOT\t%ld", nod->type, nod->root_link->name);
+        else
+            sprintf(data, "TYPE\t%d\nROOT\t%ld\nPREVIOUS\t%ld", nod->type, nod->root_link->name, nod->previous_link->name);
+        int i;
+        for(i=0; i<nod->num_link; i++)
+        {
+            sprintf(data, "%s\nFORWARD\t%d\t%ld", data, i, nod->forward_link[i]->name);
+        }
+        status = create_file(file_path, data);
+        free(file_path);
+
+        free(io);
+        free(node_path);
     }
+    free(logdata);
+}
+
+//Remove the table/node entirely from the memory and database folder.
+int remove_database_table(char *database, TABLE *tab)
+{
+    //Remove the table/node entirely from the memory and database folder.
+
+    delete_all_column_files(database, tab->name);
+
+    if(delete_table_files(database, tab->name) == FAILURE)
+        return FAILURE;
+    if(delete_table(database, tab->name) == FAILURE)
+        return FAILURE;
+
+    //Deintialize the table in the memory
+    deinitialize_table(tab);
     return SUCCESS;
 }
 
+//Reinitialize the table by parsing the data in file and write to the allocated memory.
 TABLE *reinitialize_table(char *database, TABLE *t)
 {
     int row_count, column_count, total_columns = 0;
@@ -138,6 +265,7 @@ TABLE *reinitialize_table(char *database, TABLE *t)
 
     char ***column_data = read_table_columns(database, name);
 
+    //Get total number of columns by reading through each files.
     while(1)
     {
         if(column_data[total_columns][0] == NULL) //Verify if the pointer reached the last column.
@@ -145,6 +273,7 @@ TABLE *reinitialize_table(char *database, TABLE *t)
         total_columns++;
     }
 
+    //Parse the data fetched from the file and write to the memory.
     sprintf(logdata, "reinitialize_table: Read Columns and rows in the file");
     logger(logdata, DEBUG);
     t = (TABLE *)initialize_table(name, total_columns);
@@ -155,23 +284,21 @@ TABLE *reinitialize_table(char *database, TABLE *t)
         column_count = 0;
         if(column_data[0][row_count] == NULL) //Verify if the pointer reached the last row.
                 break;
+        //Creating an array referencing the rows containing data from each row.
         while(column_count < total_columns)
         {
             if(column_data[column_count][row_count] == NULL) //Verify if the pointer reached the last column.
                 break;
             data[column_count] = (char *)malloc(strlen(column_data[column_count][row_count]) + 1);
             sprintf(data[column_count], "%s", column_data[column_count][row_count]);
-//            printf("%d:%d-> %s.\t", column_count, row_count, data[column_count]);
             column_count++;
         }
-//        row = create_row(total_columns, data[0], data[1], data[2], data[3], data[4], data[5]);
         row = create_row(t->total_column, &*data);
         add_row_in_table(t, row);
-
-//        printf("\n");
         row_count++;
     }
 
+    //Free all the memory used for reading the files.
     column_count = 0;
     while(column_count <= total_columns)
     {
@@ -180,7 +307,6 @@ TABLE *reinitialize_table(char *database, TABLE *t)
         {
             if(column_data[column_count][row_count] == NULL)
                 break;
-//            printf("%d:%d-> %s.\n", column_count, row_count, column_data[column_count][row_count]);
             free(column_data[column_count][row_count]);
             row_count++;
         }
@@ -214,6 +340,8 @@ TABLE *reinitialize_table(char *database, TABLE *t)
             continue;
         }
         sprintf(name, "column_%d", column_count);
+
+        //Free data read from files after writing into the files.
         if(strcmp(data_config[row_count], name)==0)
         {
             strcpy(t->c_type[column_count]->column_datatype, data_config[row_count + 2]);
@@ -236,15 +364,13 @@ TABLE *reinitialize_table(char *database, TABLE *t)
     return t;
 }
 
-int remove_database_column(char *database, void *t, char *c_name)
+//Remove one column by passing column name in the parameter.
+int __remove_table_column(char *database, TABLE *tab, char *c_name)
 {
-    TABLE *tab;
-    NODE *nod;
     int i, status = SUCCESS;
     int total_column;
     char *curr_col_name, *next_col_name;
 
-    tab = (TABLE *)t;
     total_column = tab->total_column;
 
     //Delete all specific column files...
@@ -294,3 +420,289 @@ int remove_database_column(char *database, void *t, char *c_name)
     tab->total_column++;
     return status;
 }
+
+TABLE *remove_column(char *database_name, TABLE *t, char* column_name)
+{
+    int status = __remove_table_column(database_name, t, column_name);
+    if(status == FAILURE)
+    {
+        add_memory_to_file(database_name, t, TABLE_TYPE);
+        return NULL;
+    }
+    t = reinitialize_table(database_name, t);
+    return t;
+}
+
+
+//Remove one or more rows from table and database files.
+int remove_table_rows(char *database, TABLE *t, int row_position[], int no_of_rows, int change_scope)
+{
+    sprintf(logdata, "remove_table_rows: Number of rows to be deleted: %d.", no_of_rows);
+    logger(logdata, DEBUG);
+
+
+    int position;
+    if(no_of_rows > 1)
+    {
+        sprintf(logdata, "remove_table_rows: Deleting multiple rows");
+        logger(logdata, DEBUG);
+        delete_multiple_rows_in_table(t, row_position, no_of_rows);
+        sprintf(logdata, "remove_table_rows: Deleted multiple rows");
+        logger(logdata, DEBUG);
+    }
+    else
+    {
+        position = row_position[0];
+        sprintf(logdata, "remove_table_rows: Deleting one row.");
+        logger(logdata, DEBUG);
+        delete_row_in_table(t, position);
+        sprintf(logdata, "remove_table_rows: Deleted one row");
+        logger(logdata, DEBUG);
+    }
+
+    if(change_scope == DEFAULT)
+    {
+        sprintf(logdata, "remove_table_rows: Deleted one row");
+        logger(logdata, DEBUG);
+        add_memory_to_file(database, (void *)t, TABLE_TYPE);
+    }
+
+    return SUCCESS;
+}
+
+/*===================Node Libraries===========================================*/
+
+void node_save(char *database_name, NODE *n)
+{
+    add_memory_to_file(database_name, (void *)n, NODE_TYPE);
+}
+
+int node_tree_save(char *database_name, NODE *n)
+{
+    int i, num_nodes, status;
+    char *logdata = (char *)malloc(LOGSIZE);
+    int pid, child_status = 0;
+    int parent_status = 0;
+    int exit_status = 0;
+
+    status = delete_node_folder(database_name);
+    if(status == FAILURE)
+    {
+        return FAILURE;
+    }
+
+    while(1)
+    {
+        add_memory_to_file(database_name, (void *)n, NODE_TYPE);
+        i = 0;
+        num_nodes = n->num_link;
+        if(num_nodes == 0)
+        {
+            exit_status = 1;
+        }
+
+        while(i < num_nodes)
+        {
+            pid = fork();
+            if(pid == 0)
+            {
+                sprintf(logdata, "%d: Created the child process: %d.", getppid(), getpid());
+                logger(logdata, INFO);
+                child_status = 1;
+                parent_status = 0;
+                n = n->forward_link[i];
+//                printf("FORK=> Child: %d ----- Parent: %d.\n", child_status, parent_status);
+                break;
+            }
+            else
+            {
+                parent_status = 1;
+//                printf("NOT FORK=> Child: %d ----- Parent: %d.\n", child_status, parent_status);
+                i++;
+            }
+        }
+
+        if(parent_status == 1 && child_status == 0)
+        {
+            break;
+        }
+
+        if((child_status == 1 && parent_status == 1) || exit_status == 1)
+        {
+            sprintf(logdata, "%d: Exiting the child process: %d.", getppid(), getpid());
+            logger(logdata, INFO);
+            while((pid = wait(&status)) > 0);
+            exit(SUCCESS);
+        }
+
+    }
+
+    sprintf(logdata, "Waiting for all child process: %d.", getpid());
+    logger(logdata, INFO);
+    while((pid = wait(&status)) > 0);
+    sprintf(logdata, "Waiting for all child process finished: %d.", getpid());
+    logger(logdata, INFO);
+
+    free(logdata);
+    return SUCCESS;
+}
+
+int node_delete(char *database, NODE *n)
+{
+    char *logdata = (char *)malloc(LOGSIZE);
+//    if(n == n->root_link || n->num_link != 0)
+//    {
+//        sprintf(logdata,"Root node cannot be deleted.");
+//        logger(logdata, INFO);
+//        free(logdata);
+//        return FAILURE;
+//    }
+
+    sprintf(logdata,"======================File_NODE_DELETE=========================\n");
+    logger(logdata, DEBUG);
+    if(n->root_link == n && n->num_link != 0)
+    {
+        sprintf(logdata, "Cannot delete root node when branch nodes are still present.");
+        logger(logdata,INFO);
+        free(logdata);
+        return FAILURE;
+    }
+    else if(n->root_link == n && n->num_link == 0)
+    {
+        sprintf(logdata, "Deleting root node..");
+        logger(logdata,INFO);
+        node_delete_memory(n);
+        free(logdata);
+        return FAILURE;
+    }
+
+    int status = node_delete_file("Georgy_DB", n->name);
+    if(status == FAILURE)
+    {
+        sprintf(logdata, "Unable to delete the node. Hence reverting back.");
+        logger(logdata,ERROR);
+        node_save(database, n);
+        free(logdata);
+        return status;
+    }
+    sprintf(logdata,"======================File_NODE_DELETE=========================\n");
+    logger(logdata, DEBUG);
+
+    sprintf(logdata,"======================Memory_NODE_DELETE=========================\n");
+    logger(logdata, DEBUG);
+    int total_links = n->num_link;
+    int i = 0;
+
+    node_print(n->root_link);
+    printf("Current node address: %p.\n", n);
+    NODE *previous_node = n->previous_link;
+    NODE **temp_link = (NODE **)malloc(sizeof(NODE *) * total_links);
+    while(i < total_links)
+    {
+        temp_link[i] = n->forward_link[i];
+        printf("Child node address: %p.\n", temp_link[i]);
+        i++;
+    }
+    i = 0;
+    while(i < total_links)
+    {
+        node_link(previous_node, temp_link[i]);
+        i++;
+    }
+    free(temp_link);
+
+
+    total_links = previous_node->num_link;
+    temp_link = (NODE **)malloc(sizeof(NODE *) * (total_links - 1));
+
+    i = 0;
+    while(previous_node->forward_link[i] != n)
+    {
+        temp_link[i] = previous_node->forward_link[i];
+        i++;
+    }
+
+    while(i < total_links - 1)
+    {
+        temp_link[i] = previous_node->forward_link[i + 1];
+        i++;
+    }
+    free(previous_node->forward_link);
+    previous_node->num_link--;
+    if(previous_node->num_link == 0)
+        previous_node->forward_link = NULL;
+    else
+        previous_node->forward_link = temp_link;
+
+
+    node_delete_memory(n);
+
+    sprintf(logdata,"======================Memory_NODE_DELETE=========================\n");
+    logger(logdata, DEBUG);
+    free(logdata);
+    return SUCCESS;
+}
+
+
+typedef struct node_agruments
+{
+    char *database;
+    NODE *n;
+} NODE_ARG;
+
+int node_delete_arg(NODE_ARG *arg)
+{
+    char *database = arg->database;
+    NODE *n = arg->n;
+    int status = node_delete(database, n);
+    return status;
+}
+
+int node_delete_tree(char *database, NODE *n)
+{
+    pthread_t thread_id;
+    int status, i, total_link;
+    char *logdata = (char *)malloc(LOGSIZE);
+    NODE_ARG *arg = (NODE_ARG *)malloc(sizeof(NODE_ARG));
+
+    while(1)
+    {
+        if(n->root_link == n && n->num_link == 0)
+        {
+            node_delete(database, n);
+            free(logdata);
+            free(arg);
+            return status;
+        }
+        else
+        {
+            total_link = n->num_link;
+            printf("Total links are %d.\n", total_link);
+            if(total_link == 0)
+                break;
+
+            NODE **child_nodes = (NODE **)malloc(sizeof(NODE **) * total_link);
+            i = 0;
+            while(i < total_link)
+            {
+                child_nodes[i] = n->forward_link[i];
+                i++;
+            }
+
+            i = 0;
+            while(i < total_link)
+            {
+                status = node_delete(database, child_nodes[i]);
+                i++;
+            }
+        }
+    }
+    node_delete(database, n);
+
+    free(logdata);
+    free(arg);
+    return SUCCESS;
+}
+
+
+/*===================Node Libraries(Completed)===========================================*/

@@ -48,6 +48,7 @@ int __write(char *filepath, char *data)
 
 int __access_file_status(char *filepath, int mode)
 {
+    char *logdata = (char *)malloc(LOGSIZE);
     int status = access(filepath, mode);
     if (mode == F_OK && status == 0)
     {
@@ -74,25 +75,38 @@ int __access_file_status(char *filepath, int mode)
         sprintf(logdata, "The file '%s' is not accessible.", filepath);
         logger(logdata, DEBUG);
     }
+    free(logdata);
     return status;
 }
 
 
 int create_folder(char *folder_name)
 {
+    char *logdata = (char *)malloc(LOGSIZE);
     sprintf(logdata, "Creating the folder '%s'.", folder_name);
     logger(logdata, DEBUG);
     int status = mkdir(folder_name, 0777);
 
     if(status == -1)
     {
-        sprintf(logdata, "The folder '%s' could not be created. Reason: %s", folder_name, strerror(errno));
-        logger(logdata, DEBUG);
-        return FAILURE;
+        if(errno != 17)
+        {
+            sprintf(logdata, "The folder '%s' could not be created. Reason: %s", folder_name, strerror(errno));
+            logger(logdata, ERROR);
+            free(logdata);
+            return FAILURE;
+        }
+        else
+        {
+            sprintf(logdata, "The folder '%s' could not be created. Reason: %s. Ignore and proceed.", folder_name, strerror(errno));
+            logger(logdata, DEBUG);
+        }
+
     }
 
     sprintf(logdata, "The folder '%s' created successfully.", folder_name);
     logger(logdata, DEBUG);
+    free(logdata);
     return SUCCESS;
 }
 
@@ -108,7 +122,7 @@ int create_database(char *name)
     status = create_folder(type_path);
 
     //Creating the node type in the Data folder
-    sprintf(type_path, "%s/Node", folder_name);
+    sprintf(type_path, "%s/NODE", folder_name);
     status = create_folder(type_path);
 
     free(type_path);
@@ -135,6 +149,7 @@ int create_type(char *database, int type, char *name)
 
 int create_file(char *Database_path, char *data)
 {
+    char *logdata = (char *)malloc(LOGSIZE);
     char *filepath = Database_path;
     sprintf(logdata, "File name is '%s'", filepath);
     logger(logdata, DEBUG);
@@ -149,13 +164,15 @@ int create_file(char *Database_path, char *data)
     if (__write(filepath, data) == FAILURE)
     {
         free(filepath);
+        free(logdata);
         return FAILURE;
     }
     else
     {
         sprintf(logdata, "File name '%s' is added.", filepath);
-        logger(logdata, INFO);
+        logger(logdata, DEBUG);
     }
+    free(logdata);
     return SUCCESS;
 }
 
@@ -180,7 +197,7 @@ int modify_file(char *filename, char *data)
         else
         {
             sprintf(logdata, "File '%s' modified.", filepath);
-            logger(logdata, INFO);
+            logger(logdata, DEBUG);
         }
     }
 
@@ -212,6 +229,23 @@ int delete_table_files(char *database, char *table_name)
     if(status != -1)
         return FAILURE;
     return SUCCESS;
+}
+
+int delete_all_column_files(char *database, char *table_name)
+{
+    char *col_path = get_table_path(database, table_name);
+    sprintf(col_path, "%s/Data/*", col_path);
+
+    char *command = (char *)malloc(strlen(col_path) + 15);
+    sprintf(command, "sudo rm -rf %s", col_path);
+    int status = system(command);
+    if(status == 0)
+        status = SUCCESS;
+    else
+        status = FAILURE;
+    free(command);
+    free(col_path);
+    return status;
 }
 
 int delete_table(char *database, char *table_name)
@@ -285,7 +319,7 @@ int __read(char *filename, char *data)
         if(fscanf(fd, "%s", data+i) == EOF)
         {
             sprintf(logdata, "Read from file Path: %s finished.", filename);
-            logger(logdata, ERROR);
+            logger(logdata, DEBUG);
             break;
 //            return FAILURE;
         }
@@ -301,21 +335,15 @@ int __read(char *filename, char *data)
 char *read_file(char *filename)
 {
     int status;
+    sprintf(logdata, "Reading file'%s'", filename);
+    logger(logdata, DEBUG);
 
-//    char *filepath = (char *)malloc(FILEPATH_SIZE); //-->
-
-//    sprintf(filepath, "%s%s", ROOT_STORAGE, filename); //-->
-//    sprintf(logdata, "Reading file'%s'", filepath); //-->
-    sprintf(logdata, "Reading file'%s'", filename); //++>
-    logger(logdata, INFO);
-
-//    if (__access_file_status(filepath, R_OK) != 0) //-->
-    if (__access_file_status(filename, R_OK) != 0) //++>
+    if (__access_file_status(filename, R_OK) != 0)
     {
         return FAILURE;
     }
 
-    char *temp_data = (char *)malloc(5000);
+    char *temp_data = (char *)malloc(MAX_CELL_SIZE * MAX_ROWS);
     status = __read(filename, temp_data);
     if (status == FAILURE)
     {
@@ -483,3 +511,56 @@ char **read_config_file(char *database, char *table_name)
     free(table_path);
     return data;
 }
+
+/*=================================NODE======================================*/
+
+int delete_node_folder(char *database_name)
+{
+    int status;
+    char *logdata = (char *)malloc(LOGSIZE);
+    char *command = (char *)malloc(FILENAME_MAX);
+
+    sprintf(command, "sudo rm -rf %s%s/NODE/*", ROOT_STORAGE, database_name);
+    sprintf(logdata, "Deleting the contents in folder: %s%s/NODE/. Executing command: %s", ROOT_STORAGE, database_name, command);
+    logger(logdata, DEBUG);
+    status = system(command);
+    if(status < 0)
+    {
+        sprintf(logdata, "Deleting the contents in folder failed");
+        logger(logdata, DEBUG);
+        free(logdata);
+        free(command);
+        return FAILURE;
+    }
+    free(logdata);
+    free(command);
+    return SUCCESS;
+}
+
+int node_delete_file(char *database, long int name)
+{
+    char *n = (char *)malloc(sizeof(long int));
+    char *logdata = (char *)malloc(LOGSIZE);
+    char *command = (char *)malloc(FILENAME_MAX);
+
+    sprintf(n, "%ld", name);
+    char *filepath = get_node_path(database, n);
+    sprintf(command, "sudo rm -rf %s", filepath);
+    sprintf(logdata, "Deleting the contents in folder: %s. Executing command: %s", filepath, command);
+    logger(logdata, DEBUG);
+
+    int status = system(command);
+    if(status < 0)
+    {
+        sprintf(logdata, "Deleting the contents in folder failed");
+        logger(logdata, DEBUG);
+        free(logdata);
+        free(command);
+        return FAILURE;
+    }
+
+    free(logdata);
+    free(command);
+    return SUCCESS;
+}
+/*===================================NODE COMPLETED====================================*/

@@ -1,5 +1,4 @@
-#define MAX_COLUMNS 1000
-#define MAX_ROWS 1000
+/*====================> Table Code <========================*/
 
 struct column_type
 {
@@ -34,16 +33,15 @@ struct table
 
 typedef struct table TABLE;
 
-struct node_t
-{
-    int a;
-};
-
-typedef struct node_t NODE;
-
 
 TABLE *initialize_table(char name[], int total_column)
 {
+    if(total_column > MAX_COLUMNS)
+    {
+        sprintf(logdata, "initialize_table: Maximum number columns exceeds more than %d allowed.", MAX_COLUMNS);
+        logger(logdata, ERROR);
+        return FAILURE;
+    }
     TABLE *t = (TABLE *)malloc(sizeof(TABLE) + sizeof(ROW) + sizeof(struct column_type));
     int i;
     t->total_rows = 0;
@@ -96,20 +94,27 @@ ROW *create_row(int num, char **data)
     return row;
 }
 
-void add_row_in_table(TABLE *t, ROW *r)
+int add_row_in_table(TABLE *t, ROW *r)
 {
     int i = t->total_rows;
+    if(i > MAX_ROWS)
+    {
+        sprintf(logdata, "initialize_table: Maximum number of rows will exceeds more than %d allowed.", MAX_ROWS);
+        logger(logdata, ERROR);
+        return FAILURE;
+    }
     t->rows[i] = r;
     t->total_rows = i + 1;
-    sprintf(logdata, "Added row to the table %s successfully.", t->name);
+    sprintf(logdata, "add_row_in_table: Added row to the table %s successfully.", t->name);
     logger(logdata, DEBUG);
+    return SUCCESS;
 }
 
 void delete_row_in_table(TABLE *t, int row_position)
 {
     int i, column_count;
 
-    sprintf(logdata, "Deleting the row with index: %d.", row_position);
+    sprintf(logdata, "delete_row_in_table: Deleting the row number %d.", row_position);
     logger(logdata, DEBUG);
     ROW *temp_row = t->rows[row_position];
 
@@ -125,7 +130,7 @@ void delete_row_in_table(TABLE *t, int row_position)
         free(temp_row->cell_data[column_count]);
     }
     free(temp_row);
-    sprintf(logdata, "Deleted the row with index: %d.", row_position);
+    sprintf(logdata, "delete_row_in_table: Deleted the row %d.", row_position);
     logger(logdata, DEBUG);
 }
 
@@ -159,8 +164,9 @@ void delete_multiple_rows_in_table(TABLE *t, int row_position[], size_t num)
     c_temp = 0;
     size_t size_q = num;
 
-    sprintf(logdata, "Number entries to be deleted is %ld.", size_q);
+    sprintf(logdata, "delete_multiple_rows_in_table: Actual number of entries that will be deleted after removing duplicates: %ld.", size_q);
     logger(logdata, DEBUG);
+
     while(1)
     {
         delete_row_in_table(t, row_position[c]);
@@ -175,6 +181,8 @@ void delete_multiple_rows_in_table(TABLE *t, int row_position[], size_t num)
                 row_position[c_temp]--;
             }
     }
+    sprintf(logdata, "delete_multiple_rows_in_table: Actual number of entries deleted: %ld.", size_q);
+    logger(logdata, DEBUG);
 }
 
 void deinitialize_table(TABLE *t)
@@ -193,3 +201,130 @@ void deinitialize_table(TABLE *t)
 
     free(t);
 }
+/*====================> Table Code <========================*/
+
+/*====================> Node Code <========================*/
+struct node_t
+{
+    int8_t type;
+    long int name;
+    char *data;
+    int num_link;
+    struct node_t *previous_link, **forward_link, *root_link;
+};
+
+typedef struct node_t NODE;
+
+NODE *initialize_node(int type)
+{
+    NODE *n = (NODE *)malloc(sizeof(NODE));
+
+    n->type = type;
+    if(type == ROOT_NODE)
+        n->name = 1;
+    else
+        n->name = -1;
+    n->data = NULL;
+    n->num_link = 0;
+    n->previous_link = NULL;
+    n->forward_link = NULL;
+    if(type == ROOT_NODE)
+        n->root_link = n;
+    else
+        n->root_link = NULL;
+    return n;
+}
+
+void node_print(NODE *n)
+{
+    int i;
+    printf("===========>Node Information<============\n");
+    printf("Type: %d\n", n->type);
+    printf("Name: %ld\n", n->name);
+    if(n->data == NULL)
+        printf("Data: NULL\n");
+    else
+        printf("Data: %s\n", n->data);
+    printf("Number of Links: %d\n", n->num_link);
+
+    if(n->root_link != n)
+        printf("P_Link: %p\n", n->previous_link);
+    printf("C_Link: %p\n", n);
+    printf("F_Link: %p\n", n->forward_link);
+    for(i=0; i < n->num_link; i++)
+    {
+        printf("F_Link-%d: %p\n", i, n->forward_link[i]);
+    }
+
+    printf("R_Link: %p\n", n->root_link);
+
+    printf("===========>---------------<=============\n");
+}
+
+
+int node_link(NODE *p_node, NODE *c_node)
+{
+    int total_link = p_node->num_link + 1;
+
+    //Assigning name to the node randomly.
+    c_node->name = (random() % time(NULL)) + time(NULL);
+
+    int i = 0;
+    NODE **temp = (NODE **)malloc(sizeof(NODE *) * total_link);
+    while(i < total_link - 1)
+    {
+        temp[i] = p_node->forward_link[i];
+        i++;
+    }
+    temp[i] = c_node;
+
+    c_node->previous_link = p_node;
+    c_node->root_link = p_node->root_link;
+    free(p_node->forward_link);
+    p_node->forward_link = temp;
+    p_node->num_link = total_link;
+    return SUCCESS;
+}
+
+void node_delete_memory(NODE *n)
+{
+//    int i = 0;
+//    if(i < n->num_link)
+//    {
+//        free(n->forward_link[i]);
+//        i++;
+//    }
+    n->previous_link = NULL;
+    n->root_link = NULL;
+
+    free((void *)n->forward_link);
+    n->forward_link = NULL;
+    free((void *)n->data);
+    n->data = NULL;
+    free((void *)n);
+    n = NULL;
+}
+/*====================> Node Code <========================*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -74,6 +74,7 @@ void __memory_table_to_file(char *database, TABLE *t)
     int column_name_size = 200;
     pthread_t thread_id[t->total_column];
     pid_t child_pid;
+    char *logdata = (char *)malloc(LOGSIZE);
 
     struct arguments
     {
@@ -117,27 +118,31 @@ void __memory_table_to_file(char *database, TABLE *t)
             {
                 sprintf(logdata, "Exiting the program because create_file function failed. Reason: %s.", strerror(errno));
                 logger(logdata, ERROR);
+                free(logdata);
                 exit(FAILURE);
             }
             sprintf(logdata, "Modified for the column in file : column_%d\n", column_count);
             logger(logdata, DEBUG);
+            free(logdata);
             exit(SUCCESS);
         }
         else if(child_pid < 0)
         {
             sprintf(logdata, "Child process creation failed and hence closing the program.. Reason: %s.", strerror(errno));
             logger(logdata, ERROR);
+            free(logdata);
             exit(FAILURE);
         }
         bzero(data, data_size);
         free(data);
         free(column_name);
         free(args);
-
     }
 
     while(waitpid(0, &status, 0) >= 0);
     free(database_path);
+
+    free(logdata);
 }
 
 //Create table/node specific configuration file.
@@ -146,6 +151,8 @@ void __create_config_file(char *database, void *tn, int type)
     char *database_path, *temp_data, *column_data;
     int status, column_count;
     long int name_size = 100000;
+    char *logdata = (char *)malloc(LOGSIZE);
+
     TABLE *t;
 
     //Create table configuration file.
@@ -176,6 +183,7 @@ void __create_config_file(char *database, void *tn, int type)
     }
     free(database_path);
     free(column_data);
+    free(logdata);
 }
 
 //Add the table and configuration data into the file.
@@ -196,8 +204,8 @@ void add_memory_to_file(char *database, void *t, int type)
     {
         nod = (NODE *)t;
 
-        char *io = (char *)malloc(sizeof(long int) + 1);
-        sprintf(io, "%ld", nod->name);
+        char *io = (char *)malloc(sizeof(long int) + 10);
+        sprintf(io, "%ld", nod->name);;
 //        printf("Node name is %s\n", io);
         status = create_type("Georgy_DB", NODE_TYPE, io);
         if(status == FAILURE)
@@ -229,7 +237,7 @@ void add_memory_to_file(char *database, void *t, int type)
         }
         status = create_file(file_path, data);
         free(file_path);
-
+        free(data);
         free(io);
         free(node_path);
     }
@@ -482,7 +490,7 @@ int node_tree_save(char *database_name, NODE *n)
     int i, num_nodes, status;
     char *logdata = (char *)malloc(LOGSIZE);
     int pid, child_status = 0;
-    int parent_status = 0;
+    int parent_status = 1;
     int exit_status = 0;
 
     status = delete_node_folder(database_name);
@@ -527,7 +535,7 @@ int node_tree_save(char *database_name, NODE *n)
             break;
         }
 
-        if((child_status == 1 && parent_status == 1) || exit_status == 1)
+        if((child_status == 1 && parent_status == 1) || (child_status == 1 && exit_status == 1))
         {
             sprintf(logdata, "%d: Exiting the child process: %d.", getppid(), getpid());
             logger(logdata, INFO);
@@ -547,19 +555,12 @@ int node_tree_save(char *database_name, NODE *n)
     return SUCCESS;
 }
 
-int node_delete(char *database, NODE *n)
+/* If the mflag is true then that means the database files will not be deleted else the database file will also get deleted. */
+int node_delete(char *database, NODE *n, bool mflag)
 {
+    int status;
     char *logdata = (char *)malloc(LOGSIZE);
-//    if(n == n->root_link || n->num_link != 0)
-//    {
-//        sprintf(logdata,"Root node cannot be deleted.");
-//        logger(logdata, INFO);
-//        free(logdata);
-//        return FAILURE;
-//    }
 
-    sprintf(logdata,"======================File_NODE_DELETE=========================\n");
-    logger(logdata, DEBUG);
     if(n->root_link == n && n->num_link != 0)
     {
         sprintf(logdata, "Cannot delete root node when branch nodes are still present.");
@@ -571,36 +572,45 @@ int node_delete(char *database, NODE *n)
     {
         sprintf(logdata, "Deleting root node..");
         logger(logdata,INFO);
+        if(mflag == FALSE)
+        {
+            status = node_delete_file(database, n->name);
+            if(status == FAILURE)
+            {
+                sprintf(logdata, "Unable to delete the root node. Hence reverting back.");
+                logger(logdata,ERROR);
+                node_save(database, n);
+                free(logdata);
+                return status;
+            }
+        }
+
         node_delete_memory(n);
         free(logdata);
-        return FAILURE;
+        return SUCCESS;
     }
 
-    int status = node_delete_file("Georgy_DB", n->name);
-    if(status == FAILURE)
+    if(mflag == FALSE)
     {
-        sprintf(logdata, "Unable to delete the node. Hence reverting back.");
-        logger(logdata,ERROR);
-        node_save(database, n);
-        free(logdata);
-        return status;
+        status = node_delete_file(database, n->name);
+        if(status == FAILURE)
+        {
+            sprintf(logdata, "Unable to delete the node. Hence reverting back.");
+            logger(logdata,ERROR);
+            node_save(database, n);
+            free(logdata);
+            return status;
+        }
     }
-    sprintf(logdata,"======================File_NODE_DELETE=========================\n");
-    logger(logdata, DEBUG);
 
-    sprintf(logdata,"======================Memory_NODE_DELETE=========================\n");
-    logger(logdata, DEBUG);
     int total_links = n->num_link;
     int i = 0;
 
-    node_print(n->root_link);
-    printf("Current node address: %p.\n", n);
     NODE *previous_node = n->previous_link;
     NODE **temp_link = (NODE **)malloc(sizeof(NODE *) * total_links);
     while(i < total_links)
     {
         temp_link[i] = n->forward_link[i];
-        printf("Child node address: %p.\n", temp_link[i]);
         i++;
     }
     i = 0;
@@ -613,8 +623,10 @@ int node_delete(char *database, NODE *n)
 
 
     total_links = previous_node->num_link;
-    temp_link = (NODE **)malloc(sizeof(NODE *) * (total_links - 1));
-
+    if(total_links - 1 != 0)
+    {
+        temp_link = (NODE **)malloc(sizeof(NODE *) * (total_links - 1));
+    }
     i = 0;
     while(previous_node->forward_link[i] != n)
     {
@@ -627,6 +639,7 @@ int node_delete(char *database, NODE *n)
         temp_link[i] = previous_node->forward_link[i + 1];
         i++;
     }
+
     free(previous_node->forward_link);
     previous_node->num_link--;
     if(previous_node->num_link == 0)
@@ -637,8 +650,6 @@ int node_delete(char *database, NODE *n)
 
     node_delete_memory(n);
 
-    sprintf(logdata,"======================Memory_NODE_DELETE=========================\n");
-    logger(logdata, DEBUG);
     free(logdata);
     return SUCCESS;
 }
@@ -650,26 +661,27 @@ typedef struct node_agruments
     NODE *n;
 } NODE_ARG;
 
-int node_delete_arg(NODE_ARG *arg)
+int node_delete_arg(NODE_ARG *arg, bool mflag)
 {
     char *database = arg->database;
     NODE *n = arg->n;
-    int status = node_delete(database, n);
+    int status = node_delete(database, n, mflag);
     return status;
 }
 
-int node_delete_tree(char *database, NODE *n)
+int node_delete_tree(char *database, NODE *n, bool mflag)
 {
     pthread_t thread_id;
     int status, i, total_link;
     char *logdata = (char *)malloc(LOGSIZE);
     NODE_ARG *arg = (NODE_ARG *)malloc(sizeof(NODE_ARG));
+    NODE *previous_node = n->previous_link;
 
     while(1)
     {
         if(n->root_link == n && n->num_link == 0)
         {
-            node_delete(database, n);
+            node_delete(database, n, mflag);
             free(logdata);
             free(arg);
             return status;
@@ -677,7 +689,6 @@ int node_delete_tree(char *database, NODE *n)
         else
         {
             total_link = n->num_link;
-            printf("Total links are %d.\n", total_link);
             if(total_link == 0)
                 break;
 
@@ -692,17 +703,140 @@ int node_delete_tree(char *database, NODE *n)
             i = 0;
             while(i < total_link)
             {
-                status = node_delete(database, child_nodes[i]);
+                status = node_delete(database, child_nodes[i], mflag);
                 i++;
             }
+            free(child_nodes);
         }
     }
-    node_delete(database, n);
+    node_delete(database, n, mflag);
+    if(previous_node != NULL)
+        node_save(database, previous_node);
 
     free(logdata);
     free(arg);
     return SUCCESS;
 }
 
+NODE *__node_reinitialize(char *database, long int name, int type)
+{
+    char *node_name = (char *)malloc(PATH_EXTRA_SIZE);
+    char **node_data, *ptr;
+    int i;
+    NODE *n;
 
+    //Create root node by parsing the rot file.
+    n = initialize_node(type);
+
+    //Get the values of the data in the node.
+    sprintf(node_name, "%ld", name);
+    node_data = (char **)malloc(sizeof(char *));
+    node_data[0] = node_content_read_file(database, node_name);
+    if(node_data[0] == NULL)
+        return FAILURE;
+    n->data = (char *)malloc(strlen(node_data[0])+1);
+    strcpy(n->data, node_data[0]);
+    n->name = strtol(node_name, &ptr, 10);
+    free(node_data[0]);
+    free(node_data);
+
+    i = 0;
+    node_data = node_config_read_file(database, node_name);
+
+    //Get the config values in the config file.
+    i = 0;
+    while(node_data[i] != '\0')
+    {
+        if(strcmp(node_data[i], "TYPE")==0)
+        {
+            n->type = atoi(node_data[i + 1]);
+            free(node_data[i]);
+            i = i + 1;
+        }
+        free(node_data[i]);
+        i++;
+    }
+    free(node_data);
+    free(node_name);
+    return n;
+}
+
+NODE *__node_tree_reinitialize(char *database, NODE *pn)
+{
+    //Verify number of forward link available.
+    int i = 0;
+    int total_count = 0;
+    char *ptr;
+    long int name;
+    char *node_name = (char *)malloc(PATH_EXTRA_SIZE);
+    sprintf(node_name, "%ld", pn->name);
+    char **node_data = node_config_read_file(database, node_name);
+    free(node_name);
+    NODE *cn;
+
+    while(node_data[i] != '\0')
+    {
+        if(strcmp(node_data[i], "FORWARD")==0)
+        {
+            total_count++;
+        }
+        i++;
+    }
+
+    if(total_count == 0)
+    {
+        i = 0;
+        while(node_data[i] != '\0')
+        {
+            free(node_data[i]);
+            i++;
+        }
+        free(node_data[i]);
+        free(node_data);
+        return pn;
+    }
+
+//    n->num_link = total_count;
+//    n->forward_link = (NODE **)malloc(sizeof(NODE *) * total_count);
+    i = 0;
+    while(node_data[i] != '\0')
+    {
+        if(strcmp(node_data[i], "FORWARD")==0)
+        {
+            name = strtol(node_data[i+2], &ptr,10);
+            free(node_data[i]);
+            free(node_data[i+1]);
+            cn = __node_reinitialize(database, name, BRANCH_NODE);      //Reinitialize the Node.
+            node_link(pn, cn);
+            cn = __node_tree_reinitialize(database, cn);        //Pass the new node recursively into the same function to attach child node.
+            i = i + 2;
+        }
+        free(node_data[i]);
+        i++;
+    }
+//    free(node_data[i]);
+    free(node_data);
+    return cn->root_link;
+}
+
+NODE *node_tree_reinitialize(char *database)
+{
+    NODE *n;
+    n = __node_reinitialize(database, 1, ROOT_NODE);
+    n = __node_tree_reinitialize(database, n);
+    return n->root_link;
+}
 /*===================Node Libraries(Completed)===========================================*/
+
+
+
+
+
+
+
+
+
+
+
+
+

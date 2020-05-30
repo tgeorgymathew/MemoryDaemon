@@ -303,6 +303,7 @@ int rename_column_name(char *database, char *table_name, char *old_column, char 
 int __read(char *filename, char *data)
 {
     FILE *fd;
+    char *logdata = (char *)malloc(LOGSIZE);
     fd = fopen(filename, READ);
 //    char *temp;
 
@@ -310,6 +311,7 @@ int __read(char *filename, char *data)
     {
         sprintf(logdata, "Unable to open file, hence file could not be read. Path: %s", filename);
         logger(logdata, ERROR);
+        free(logdata);
         return FAILURE;
     }
 
@@ -329,17 +331,20 @@ int __read(char *filename, char *data)
     sprintf(data, "%sEOF", data);
 //    data = temp;
     fclose(fd);
+    free(logdata);
     return SUCCESS;
 }
 
 char *read_file(char *filename)
 {
     int status;
+    char *logdata = (char *)malloc(LOGSIZE);
     sprintf(logdata, "Reading file'%s'", filename);
     logger(logdata, DEBUG);
 
     if (__access_file_status(filename, R_OK) != 0)
     {
+        free(logdata);
         return FAILURE;
     }
 
@@ -347,11 +352,13 @@ char *read_file(char *filename)
     status = __read(filename, temp_data);
     if (status == FAILURE)
     {
+        free(logdata);
         free(temp_data);
         return FAILURE;
     }
     char *data = (char *)malloc(strlen(temp_data)  + 1);
     strcpy(data, temp_data);
+    free(logdata);
     free(temp_data);
     return data;
 }
@@ -554,13 +561,118 @@ int node_delete_file(char *database, long int name)
     {
         sprintf(logdata, "Deleting the contents in folder failed");
         logger(logdata, DEBUG);
+        free(filepath);
         free(logdata);
         free(command);
         return FAILURE;
     }
 
+    free(filepath);
     free(logdata);
     free(command);
     return SUCCESS;
+}
+
+
+char **__node_read_file(char *database, char *file_path)
+{
+//    char *folder_path = get_node_path(database, filename);
+//    char *file_path = (char *)malloc(strlen(folder_path) + PATH_EXTRA_SIZE);
+    char *temp, *temp_data_unformatted;
+
+//    /var/AIDB/Georgy_DB/NODE/1/Data/content
+//    sprintf(file_path, "%s/Data/content", folder_path);
+
+    char *data_unformatted = read_file(file_path);
+    if(data_unformatted == FAILURE)
+        return FAILURE;
+    temp_data_unformatted = data_unformatted;
+
+    //Find number of arrays to be created.
+    int i = 0;
+    while(1)
+    {
+        temp = (char *)malloc(strlen(data_unformatted) + 1);
+        sscanf(data_unformatted, "%[^|@#|]s", temp);
+        if(strcmp(temp, "EOF") == 0)
+        {
+            free(temp);
+            break;
+        }
+        data_unformatted = data_unformatted + strlen(temp) + strlen(DELIMITOR);
+        i++;
+        free(temp);
+    }
+    data_unformatted = temp_data_unformatted;
+
+    //Assign values to each array.
+    int total_count = i;
+    char **data = (char **)malloc(sizeof(char *) * (total_count + 1));
+    i = 0;
+    while(1)
+    {
+        temp = (char *)malloc(strlen(data_unformatted)+1);
+        sscanf(data_unformatted, "%[^|@#|]s", temp);
+        if(strcmp(temp, "EOF") == 0)
+        {
+            free(temp);
+            break;
+        }
+        data[i] = (char *)malloc(strlen(temp) + 1);
+        sprintf(data[i], "%s", temp);
+        data_unformatted = data_unformatted + strlen(temp) + strlen(DELIMITOR);
+        i++;
+        free(temp);
+    }
+    data_unformatted = temp_data_unformatted;
+    data[i] = '\0';
+
+    free(temp_data_unformatted);
+//    free(folder_path);
+
+    return data;
+}
+
+char *node_content_read_file(char *database, char *filename)
+{
+    char *folder_path = get_node_path(database, filename);
+    char *file_path = (char *)malloc(strlen(folder_path) + PATH_EXTRA_SIZE);
+
+//    /var/AIDB/Georgy_DB/NODE/1/Data/content
+    sprintf(file_path, "%s/Data/content", folder_path);
+    free(folder_path);
+
+    char **data = __node_read_file(database, file_path);
+    if(data == FAILURE)
+    {
+        free(data);
+        free(file_path);
+        return FAILURE;
+    }
+    char *data_ret = (char *)malloc(strlen(data[0]) + 1);
+    strcpy(data_ret, data[0]);
+    free(data[0]);
+    free(data);
+    free(file_path);
+    return data_ret;
+}
+
+char **node_config_read_file(char *database, char *filename)
+{
+    char *folder_path = get_node_path(database, filename);
+    char *file_path = (char *)malloc(strlen(folder_path) + PATH_EXTRA_SIZE);
+
+//    /var/AIDB/Georgy_DB/NODE/1/Data/content
+    sprintf(file_path, "%s/node.config", folder_path);
+    free(folder_path);
+
+    char **data = __node_read_file(database, file_path);
+    if(data == FAILURE)
+    {
+        free(file_path);
+        return FAILURE;
+    }
+    free(file_path);
+    return data;
 }
 /*===================================NODE COMPLETED====================================*/

@@ -15,9 +15,11 @@ typedef struct rows ROW;
 
 ROW *initialize_row()
 {
+    char *logdata = (char *)malloc(LOGSIZE);
     ROW *row = (ROW *)malloc(sizeof(ROW));
     sprintf(logdata, "Initialized row successfully.");
     logger(logdata, DEBUG);
+    free(logdata);
     return row;
 }
 
@@ -36,10 +38,12 @@ typedef struct table TABLE;
 
 TABLE *initialize_table(char name[], int total_column)
 {
+    char *logdata = (char *)malloc(LOGSIZE);
     if(total_column > MAX_COLUMNS)
     {
         sprintf(logdata, "initialize_table: Maximum number columns exceeds more than %d allowed.", MAX_COLUMNS);
         logger(logdata, ERROR);
+        free(logdata);
         return FAILURE;
     }
     TABLE *t = (TABLE *)malloc(sizeof(TABLE) + sizeof(ROW) + sizeof(struct column_type));
@@ -53,6 +57,7 @@ TABLE *initialize_table(char name[], int total_column)
     }
     sprintf(logdata, "Initialized table %s successfully.", t->name);
     logger(logdata, DEBUG);
+    free(logdata);
     return t;
 }
 
@@ -80,6 +85,7 @@ void table_print(TABLE *t)
 
 ROW *create_row(int num, char **data)
 {
+    char *logdata = (char *)malloc(LOGSIZE);
     int i;
     ROW *row = initialize_row();
 
@@ -91,22 +97,26 @@ ROW *create_row(int num, char **data)
     }
     sprintf(logdata, "Created row successfully.");
     logger(logdata, DEBUG);
+    free(logdata);
     return row;
 }
 
 int add_row_in_table(TABLE *t, ROW *r)
 {
+    char *logdata = (char *)malloc(LOGSIZE);
     int i = t->total_rows;
     if(i > MAX_ROWS)
     {
         sprintf(logdata, "initialize_table: Maximum number of rows will exceeds more than %d allowed.", MAX_ROWS);
         logger(logdata, ERROR);
+        free(logdata);
         return FAILURE;
     }
     t->rows[i] = r;
     t->total_rows = i + 1;
     sprintf(logdata, "add_row_in_table: Added row to the table %s successfully.", t->name);
     logger(logdata, DEBUG);
+    free(logdata);
     return SUCCESS;
 }
 
@@ -267,7 +277,8 @@ int node_link(NODE *p_node, NODE *c_node)
     int total_link = p_node->num_link + 1;
 
     //Assigning name to the node randomly.
-    c_node->name = (random() % time(NULL)) + time(NULL);
+    if(c_node->name < 0)
+        c_node->name = (random() % time(NULL)) + time(NULL);
 
     int i = 0;
     NODE **temp = (NODE **)malloc(sizeof(NODE *) * total_link);
@@ -288,21 +299,26 @@ int node_link(NODE *p_node, NODE *c_node)
 
 void node_delete_memory(NODE *n)
 {
+    char *logdata = (char *)malloc(LOGSIZE);
 //    int i = 0;
 //    if(i < n->num_link)
 //    {
 //        free(n->forward_link[i]);
 //        i++;
 //    }
+
     n->previous_link = NULL;
     n->root_link = NULL;
 
     free((void *)n->forward_link);
     n->forward_link = NULL;
+    sprintf(logdata, "Address: %p. Size: %ld.", n , sizeof(*n));
+    logger(logdata, DEBUG);
     free((void *)n->data);
     n->data = NULL;
     free((void *)n);
     n = NULL;
+    free(logdata);
 }
 /*====================> Node Code <========================*/
 

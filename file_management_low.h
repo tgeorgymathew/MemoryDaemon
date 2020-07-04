@@ -1,4 +1,5 @@
 #define PATH_EXTRA_SIZE 50
+#define NODE_CONTENT_SIZE 1000
 #define DELIMITOR "|@#|"
 
 char *get_database_path(char *database)
@@ -45,6 +46,26 @@ int __write(char *filepath, char *data)
     return SUCCESS;
 }
 
+int __append(char *filepath, char *data)
+{
+    FILE *fd;
+    fd = fopen(filepath, APPEND);
+    if(fd==NULL)
+    {
+        sprintf(logdata, "Unable to open file, hence data cannot be written to the file. Path: %s", filepath);
+        logger(logdata, ERROR);
+        return FAILURE;
+    }
+
+    if(fprintf(fd, "%s", data) < 0)
+    {
+        sprintf(logdata, "Unable to write to file. Path: %s", filepath);
+        logger(logdata, ERROR);
+        return FAILURE;
+    }
+    fclose(fd);
+    return SUCCESS;
+}
 
 int __access_file_status(char *filepath, int mode)
 {
@@ -117,12 +138,18 @@ int create_database(char *name)
     int status = create_folder(folder_name);
 
     //Creating the table type in the Data folder
-    char *type_path = (char *)malloc(strlen(folder_name) + 8);
+    char *type_path = (char *)malloc(strlen(folder_name) + PATH_EXTRA_SIZE);
     sprintf(type_path, "%s/TABLE", folder_name);
     status = create_folder(type_path);
 
     //Creating the node type in the Data folder
     sprintf(type_path, "%s/NODE", folder_name);
+    status = create_folder(type_path);
+
+    sprintf(type_path, "%s/executables", folder_name);
+    status = create_folder(type_path);
+
+    sprintf(type_path, "%s/tmp", folder_name);
     status = create_folder(type_path);
 
     free(type_path);
@@ -202,6 +229,34 @@ int modify_file(char *filename, char *data)
     }
 
     free(filepath);
+    return SUCCESS;
+}
+
+int append_file(char *filename, char *data)
+{
+    char *logdata = (char *)malloc(LOGSIZE);
+    sprintf(logdata, "File name is '%s'", filename);
+    logger(logdata, DEBUG);
+    if (__access_file_status(filename, R_OK) != 0)
+    {
+//        free(filepath);
+        free(logdata);
+        return FAILURE;
+    }
+
+    if(__append(filename, data) ==FAILURE)
+    {
+//        free(filepath);
+        free(logdata);
+        return FAILURE;
+    }
+    else
+    {
+        sprintf(logdata, "File '%s' appended.", filename);
+        logger(logdata, DEBUG);
+    }
+//    free(filepath);
+    free(logdata);
     return SUCCESS;
 }
 
@@ -333,6 +388,41 @@ int __read(char *filename, char *data)
     fclose(fd);
     free(logdata);
     return SUCCESS;
+}
+
+char *__read2(char *filename)
+{
+    FILE *fd;
+    char *logdata = (char *)malloc(LOGSIZE);
+    char *data, *temp_data;
+    fd = fopen(filename, READ);
+//    char *temp;
+
+    if(fd==NULL)
+    {
+        sprintf(logdata, "Unable to open file, hence file could not be read. Path: %s", filename);
+        logger(logdata, ERROR);
+        free(logdata);
+        return FAILURE;
+    }
+
+    temp_data = (char *)calloc(NODE_CONTENT_SIZE, 1);
+    int status = fread((void *)temp_data, 1, NODE_CONTENT_SIZE, fd);
+
+    if(status == 0)
+    {
+        fclose(fd);
+        free(temp_data);
+        free(logdata);
+        return FAILURE;
+    }
+    data = (char *)malloc(strlen(temp_data) + 1);
+    strcpy(data, temp_data);
+//    sprintf(data, "%s%sEOF", data, DELIMITOR);
+    free(temp_data);
+    fclose(fd);
+    free(logdata);
+    return data;
 }
 
 char *read_file(char *filename)
@@ -633,6 +723,13 @@ char **__node_read_file(char *database, char *file_path)
     return data;
 }
 
+char *__node_content_read_file(char *filepath)
+{
+//    char *temp_data = (char *)malloc(NODE_CONTENT_SIZE);
+    char *temp_data = __read2(filepath);
+    return temp_data;
+}
+
 char *node_content_read_file(char *database, char *filename)
 {
     char *folder_path = get_node_path(database, filename);
@@ -642,17 +739,20 @@ char *node_content_read_file(char *database, char *filename)
     sprintf(file_path, "%s/Data/content", folder_path);
     free(folder_path);
 
-    char **data = __node_read_file(database, file_path);
-    if(data == FAILURE)
-    {
-        free(data);
-        free(file_path);
-        return FAILURE;
-    }
-    char *data_ret = (char *)malloc(strlen(data[0]) + 1);
-    strcpy(data_ret, data[0]);
-    free(data[0]);
-    free(data);
+//    char **data = __node_read_file(database, file_path);
+//    if(data == FAILURE)
+//    {
+//        free(data);
+//        free(file_path);
+//        return FAILURE;
+//    }
+//    char *data_ret = (char *)malloc(strlen(data[0]) + 1);
+//    strcpy(data_ret, data[0]);
+
+    char *data_ret = __node_content_read_file(file_path);
+
+//    free(data[0]);
+//    free(data);
     free(file_path);
     return data_ret;
 }

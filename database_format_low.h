@@ -2,8 +2,8 @@
 
 struct column_type
 {
-    char column_datatype[15];
-    char column_mode[15];
+    short int column_datatype;
+    short int column_mode;
 };
 
 struct rows
@@ -64,6 +64,15 @@ TABLE *initialize_table(char name[], int total_column)
 void table_print(TABLE *t)
 {
     int i, j = 0;
+
+    printf("Table name:  %s\n", t->name);
+    printf("Number columns: %d\nNumber rows:%d\n", t->total_column, t->total_rows);
+    printf("Table type: %s\n", t->table_type);
+    printf("Mode\tDatatype\n");
+    for(i = 0; i < t->total_column; i++)
+    {
+        printf("%d\t%d\n", t->c_type[i]->column_mode, t->c_type[i]->column_datatype);
+    }
 
     for(i = 0; i < t->total_rows; i++)
     {
@@ -296,6 +305,24 @@ int node_link(NODE *p_node, NODE *c_node)
     p_node->num_link = total_link;
     return SUCCESS;
 }
+
+//NODE *node_copy(NODE *n, bool exclude_data)
+//{
+//    NODE *new_node;
+//    new_node = initialize_node(n->type);
+//    memcpy((void *)new_node, (void *)n, sizeof(n));
+//    new_node->name = n->name;
+//    new_node->root_link = n->root_link;
+//    new_node->type = n->type;
+//    new_node->previous_link = n->previous_link;
+//    new_node->forward_link = n->forward_link;
+//    if(exclude_data == false)
+//    {
+//        new_node->data = (char *)malloc(strlen(n->data) + 1);
+//        strcpy(new_node->data, n->data);
+//    }
+//    return new_node;
+//}
 
 void node_delete_memory(NODE *n)
 {

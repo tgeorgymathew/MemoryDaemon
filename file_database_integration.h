@@ -66,7 +66,7 @@ int create_file_wth_struct_args(void *args_d)
 //    free(database_path);
 //}
 
-void __memory_table_to_file(char *database, TABLE *t)
+int __memory_table_to_file(char *database, TABLE *t)
 {
     int row_count, column_count, status;
     char *data, *column_name, *database_path;
@@ -119,19 +119,19 @@ void __memory_table_to_file(char *database, TABLE *t)
                 sprintf(logdata, "Exiting the program because create_file function failed. Reason: %s.", strerror(errno));
                 logger(logdata, ERROR);
                 free(logdata);
-                exit(FAILURE);
+                return FAILURE;
             }
             sprintf(logdata, "Modified for the column in file : column_%d\n", column_count);
             logger(logdata, DEBUG);
             free(logdata);
-            exit(SUCCESS);
+            return SUCCESS;
         }
         else if(child_pid < 0)
         {
             sprintf(logdata, "Child process creation failed and hence closing the program.. Reason: %s.", strerror(errno));
             logger(logdata, ERROR);
             free(logdata);
-            exit(FAILURE);
+            return FAILURE;
         }
         bzero(data, data_size);
         free(data);
@@ -143,10 +143,11 @@ void __memory_table_to_file(char *database, TABLE *t)
     free(database_path);
 
     free(logdata);
+    return SUCCESS;
 }
 
 //Create table/node specific configuration file.
-void __create_config_file(char *database, void *tn, int type)
+int __create_config_file(char *database, void *tn, int type)
 {
     char *database_path, *temp_data, *column_data;
     int status, column_count;
@@ -166,7 +167,7 @@ void __create_config_file(char *database, void *tn, int type)
         sprintf(temp_data, "TABLE %s", t->table_type);
         for(column_count = 0; column_count < t->total_column; column_count++)
         {
-            sprintf(temp_data, "%s\ncolumn_%d\t%s\t%s", temp_data, column_count, t->c_type[column_count]->column_mode, t->c_type[column_count]->column_datatype);
+            sprintf(temp_data, "%s\ncolumn_%d\t%d\t%d", temp_data, column_count, t->c_type[column_count]->column_mode, t->c_type[column_count]->column_datatype);
         }
         column_data = (char *)malloc(strlen(temp_data)  + 1);
         strcpy(column_data, temp_data);
@@ -178,16 +179,52 @@ void __create_config_file(char *database, void *tn, int type)
         {
             sprintf(logdata, "Exiting the program because create_file function failed.");
             logger(logdata, ERROR);
-            exit(FAILURE);
+            return FAILURE;
         }
     }
     free(database_path);
     free(column_data);
     free(logdata);
+    return SUCCESS;
+}
+
+int __node_config_to_file(NODE *nod, char *node_path)
+{
+    int status;
+    char *logdata = (char *)malloc(LOGSIZE);
+    char *file_path = (char *)malloc(strlen(node_path) + PATH_EXTRA_SIZE);
+    sprintf(file_path, "%s/node.config", node_path);
+    char *data = (char *)malloc(1000);
+
+    if(nod == nod->root_link)
+        sprintf(data, "TYPE\t%d\nROOT\t%ld", nod->type, nod->root_link->name);
+    else
+        sprintf(data, "TYPE\t%d\nROOT\t%ld\nPREVIOUS\t%ld", nod->type, nod->root_link->name, nod->previous_link->name);
+    int i;
+    for(i=0; i<nod->num_link; i++)
+    {
+        sprintf(data, "%s\nFORWARD\t%d\t%ld", data, i, nod->forward_link[i]->name);
+    }
+    status = create_file(file_path, data);
+    if(status == FAILURE)
+    {
+        sprintf(logdata, "Failed to create file '%s'.", file_path);
+        logger(logdata, ERROR);
+        free(file_path);
+        free(logdata);
+//        free(node_path);
+        free(data);
+//        free(io);
+        return FAILURE;
+    }
+    free(logdata);
+    free(file_path);
+    free(data);
+    return SUCCESS;
 }
 
 //Add the table and configuration data into the file.
-void add_memory_to_file(char *database, void *t, int type)
+int add_memory_to_file(char *database, void *t, int type)
 {
     TABLE *tab;
     NODE *nod;
@@ -197,51 +234,85 @@ void add_memory_to_file(char *database, void *t, int type)
     if(type == TABLE_TYPE)
     {
         tab = (TABLE *)t;
-        __memory_table_to_file(database, tab);
-        __create_config_file(database, tab, type);
+        status = __memory_table_to_file(database, tab);
+        if(status ==FAILURE)
+            return FAILURE;
+        status = __create_config_file(database, tab, type);
+        if(status == FAILURE)
+            return FAILURE;
     }
     else if(type==NODE_TYPE)
     {
         nod = (NODE *)t;
 
         char *io = (char *)malloc(sizeof(long int) + 10);
-        sprintf(io, "%ld", nod->name);;
+        sprintf(io, "%ld", nod->name);
 //        printf("Node name is %s\n", io);
-        status = create_type("Georgy_DB", NODE_TYPE, io);
+        status = create_type(database, NODE_TYPE, io);
         if(status == FAILURE)
         {
             sprintf(logdata, "Failed to write the data in the file. Node name is %ld.", nod->name);
             logger(logdata, ERROR);
             free(logdata);
-            exit(FAILURE);
+            return FAILURE;
         }
 
-        char *node_path = get_node_path("Georgy_DB", io);
+        char *node_path = get_node_path(database, io);
         char *file_path = (char *)malloc(strlen(node_path) + strlen(io) + PATH_EXTRA_SIZE);
         sprintf(file_path, "%s/Data/content", node_path);
         status = create_file(file_path, nod->data);
-        free(file_path);
 
-        file_path = (char *)malloc(strlen(node_path) + PATH_EXTRA_SIZE);
-        sprintf(file_path, "%s/node.config", node_path);
-        char *data = (char *)malloc(1000);
-
-        if(nod == nod->root_link)
-            sprintf(data, "TYPE\t%d\nROOT\t%ld", nod->type, nod->root_link->name);
-        else
-            sprintf(data, "TYPE\t%d\nROOT\t%ld\nPREVIOUS\t%ld", nod->type, nod->root_link->name, nod->previous_link->name);
-        int i;
-        for(i=0; i<nod->num_link; i++)
+        if(status == FAILURE)
         {
-            sprintf(data, "%s\nFORWARD\t%d\t%ld", data, i, nod->forward_link[i]->name);
+            sprintf(logdata, "Failed to create file '%s'.", file_path);
+            logger(logdata, ERROR);
+            free(file_path);
+            free(logdata);
+            free(node_path);
+            free(io);
+            return FAILURE;
         }
-        status = create_file(file_path, data);
+
+        status = __node_config_to_file(nod, node_path);
+        if(status == FAILURE)
+        {
+            sprintf(logdata, "Failed to add node from memory to file. %s", file_path);
+            logger(logdata, ERROR);
+            free(file_path);
+            free(logdata);
+            free(io);
+            free(node_path);
+            return FAILURE;
+        }
+
         free(file_path);
-        free(data);
         free(io);
         free(node_path);
     }
     free(logdata);
+    return SUCCESS;
+}
+
+
+TABLE *create_table(char *name, int number_of_columns, struct column_type *col_type[])
+{
+    int i;
+    TABLE *t = initialize_table(name, number_of_columns);			//Initialize table first.
+	//Configure the columns mode and datatype.
+	for (i = 0; i < t->total_column; i++)
+    {
+        t->c_type[i]->column_mode = col_type[i]->column_mode;
+		t->c_type[i]->column_datatype = col_type[i]->column_datatype;
+        free(col_type[i]);
+	}
+
+	return t;
+}
+
+int table_save(char *database, TABLE *t)
+{
+    int status = add_memory_to_file(database, (void *)t, TABLE_TYPE);
+    return status;
 }
 
 //Remove the table/node entirely from the memory and database folder.
@@ -352,8 +423,8 @@ TABLE *reinitialize_table(char *database, TABLE *t)
         //Free data read from files after writing into the files.
         if(strcmp(data_config[row_count], name)==0)
         {
-            strcpy(t->c_type[column_count]->column_datatype, data_config[row_count + 2]);
-            strcpy(t->c_type[column_count]->column_mode, data_config[row_count + 1]);
+            t->c_type[column_count]->column_datatype = atoi(data_config[row_count + 2]);
+            t->c_type[column_count]->column_mode = atoi(data_config[row_count + 1]);
             free(data_config[row_count]);
             free(data_config[row_count + 1]);
             free(data_config[row_count + 2]);
@@ -408,8 +479,8 @@ int __remove_table_column(char *database, TABLE *tab, char *c_name)
             {
                 next_col_name = (char *)malloc(20);
                 sprintf(next_col_name, "column_%d", i + 1);
-                strcpy(tab->c_type[i]->column_datatype, tab->c_type[i + 1]->column_datatype);
-                strcpy(tab->c_type[i]->column_mode, tab->c_type[i + 1]->column_mode);
+                tab->c_type[i]->column_datatype = tab->c_type[i + 1]->column_datatype;
+                tab->c_type[i]->column_mode = tab->c_type[i + 1]->column_mode;
                 sprintf(logdata, "======> Renaming %s , %s. \n", next_col_name, curr_col_name);
                 logger(logdata, DEBUG);
                 status = rename_column_name(database, tab->name, next_col_name, curr_col_name);
@@ -480,9 +551,10 @@ int remove_table_rows(char *database, TABLE *t, int row_position[], int no_of_ro
 
 /*===================Node Libraries===========================================*/
 
-void node_save(char *database_name, NODE *n)
+int node_save(char *database_name, NODE *n)
 {
-    add_memory_to_file(database_name, (void *)n, NODE_TYPE);
+    int status = add_memory_to_file(database_name, (void *)n, NODE_TYPE);
+    return status;
 }
 
 int node_tree_save(char *database_name, NODE *n)
@@ -502,6 +574,7 @@ int node_tree_save(char *database_name, NODE *n)
     while(1)
     {
         add_memory_to_file(database_name, (void *)n, NODE_TYPE);
+
         i = 0;
         num_nodes = n->num_link;
         if(num_nodes == 0)
@@ -669,6 +742,7 @@ int node_delete_arg(NODE_ARG *arg, bool mflag)
     return status;
 }
 
+/*mflag -> If action is required only */
 int node_delete_tree(char *database, NODE *n, bool mflag)
 {
     pthread_t thread_id;
@@ -677,10 +751,13 @@ int node_delete_tree(char *database, NODE *n, bool mflag)
     NODE_ARG *arg = (NODE_ARG *)malloc(sizeof(NODE_ARG));
     NODE *previous_node = n->previous_link;
 
+
     while(1)
     {
         if(n->root_link == n && n->num_link == 0)
         {
+//            if(data_mode == SYNTAX_DATA_MODE)
+//                free_syntax_parameter((C_SYNTAX *)n->data);
             node_delete(database, n, mflag);
             free(logdata);
             free(arg);
@@ -703,12 +780,16 @@ int node_delete_tree(char *database, NODE *n, bool mflag)
             i = 0;
             while(i < total_link)
             {
+//                if(data_mode == SYNTAX_DATA_MODE)
+//                    free_syntax_parameter((C_SYNTAX *)child_nodes[i]->data);
                 status = node_delete(database, child_nodes[i], mflag);
                 i++;
             }
             free(child_nodes);
         }
     }
+//    if(data_mode == SYNTAX_DATA_MODE)
+//        free_syntax_parameter((C_SYNTAX *)n->data);
     node_delete(database, n, mflag);
     if(previous_node != NULL)
         node_save(database, previous_node);

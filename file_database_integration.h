@@ -745,7 +745,6 @@ int node_delete_arg(NODE_ARG *arg, bool mflag)
 /*mflag -> If action is required only */
 int node_delete_tree(char *database, NODE *n, bool mflag)
 {
-    pthread_t thread_id;
     int status, i, total_link;
     char *logdata = (char *)malloc(LOGSIZE);
     NODE_ARG *arg = (NODE_ARG *)malloc(sizeof(NODE_ARG));
@@ -780,8 +779,6 @@ int node_delete_tree(char *database, NODE *n, bool mflag)
             i = 0;
             while(i < total_link)
             {
-//                if(data_mode == SYNTAX_DATA_MODE)
-//                    free_syntax_parameter((C_SYNTAX *)child_nodes[i]->data);
                 status = node_delete(database, child_nodes[i], mflag);
                 i++;
             }

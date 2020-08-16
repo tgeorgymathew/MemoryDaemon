@@ -228,7 +228,7 @@ struct node_t
     int8_t type;
     long int name;
     char *data;
-    int num_link;
+    unsigned int num_link;
     struct node_t *previous_link, **forward_link, *root_link;
 };
 
@@ -306,6 +306,29 @@ int node_link(NODE *p_node, NODE *c_node)
     return SUCCESS;
 }
 
+int node_link_ignore_previous(NODE *p_node, NODE *c_node)
+{
+    int total_link = p_node->num_link + 1;
+
+    //Assigning name to the node randomly.
+    if(c_node->name < 0)
+        c_node->name = (random() % time(NULL)) + time(NULL);
+
+    int i = 0;
+    NODE **temp = (NODE **)malloc(sizeof(NODE *) * total_link);
+    while(i < total_link - 1)
+    {
+        temp[i] = p_node->forward_link[i];
+        i++;
+    }
+    temp[i] = c_node;
+
+    free(p_node->forward_link);
+    p_node->forward_link = temp;
+    p_node->num_link = total_link;
+    return SUCCESS;
+}
+
 //NODE *node_copy(NODE *n, bool exclude_data)
 //{
 //    NODE *new_node;
@@ -339,8 +362,8 @@ void node_delete_memory(NODE *n)
 
     free((void *)n->forward_link);
     n->forward_link = NULL;
-    sprintf(logdata, "Address: %p. Size: %ld.", n , sizeof(*n));
-    logger(logdata, DEBUG);
+//    sprintf(logdata, "Address: %p. Size: %ld.", n , sizeof(*n));
+//    logger(logdata, DEBUG);
     free((void *)n->data);
     n->data = NULL;
     free((void *)n);

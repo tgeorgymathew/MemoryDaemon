@@ -196,3 +196,14 @@ void simple_storage_word(NODE *r_node, char *data)
     }
     free(sel_node_local);
 }
+
+void simple_storage_cleanup(NODE *n)
+{
+    int i = 0;
+    while(i < n->num_link)
+    {
+        node_delete_memory(n->forward_link[i]);
+        i++;
+    }
+    node_delete_memory(n);
+}

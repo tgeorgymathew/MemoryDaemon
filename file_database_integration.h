@@ -194,16 +194,20 @@ int __node_config_to_file(NODE *nod, char *node_path)
     char *logdata = (char *)malloc(LOGSIZE);
     char *file_path = (char *)malloc(strlen(node_path) + PATH_EXTRA_SIZE);
     sprintf(file_path, "%s/node.config", node_path);
-    char *data = (char *)malloc(1000);
+    char *data, *temp_data = (char *)malloc(100);
 
     if(nod == nod->root_link)
-        sprintf(data, "TYPE\t%d\nROOT\t%ld", nod->type, nod->root_link->name);
+        sprintf(temp_data, "TYPE\t%d\nROOT\t%ld", nod->type, nod->root_link->name);
     else
-        sprintf(data, "TYPE\t%d\nROOT\t%ld\nPREVIOUS\t%ld", nod->type, nod->root_link->name, nod->previous_link->name);
+        sprintf(temp_data, "TYPE\t%d\nROOT\t%ld\nPREVIOUS\t%ld", nod->type, nod->root_link->name, nod->previous_link->name);
+    data = temp_data;
     int i;
     for(i=0; i<nod->num_link; i++)
     {
-        sprintf(data, "%s\nFORWARD\t%d\t%ld", data, i, nod->forward_link[i]->name);
+        temp_data = (char *)malloc(strlen(data) + strlen((char *)&nod->forward_link[i]->name) + 20);
+        sprintf(temp_data, "%s\nFORWARD\t%d\t%ld", data, i, nod->forward_link[i]->name);
+        free(data);
+        data = temp_data;
     }
     status = create_file(file_path, data);
     if(status == FAILURE)
@@ -212,9 +216,7 @@ int __node_config_to_file(NODE *nod, char *node_path)
         logger(logdata, ERROR);
         free(file_path);
         free(logdata);
-//        free(node_path);
         free(data);
-//        free(io);
         return FAILURE;
     }
     free(logdata);
@@ -796,6 +798,25 @@ int node_delete_tree(char *database, NODE *n, bool mflag)
     return SUCCESS;
 }
 
+NODE *node_search_by_name(NODE *cn, long int name)
+{
+    if(cn->name == name)
+        return cn;
+    else
+    {
+        int i = 0;
+        NODE *searched_node;
+        while(i < cn->num_link)
+        {
+            searched_node = node_search_by_name(cn->forward_link[i], name);
+            if(searched_node)
+                return searched_node;
+            i++;
+        }
+    }
+    return NULL;
+}
+
 NODE *__node_reinitialize(char *database, long int name, int type)
 {
     char *node_name = (char *)malloc(PATH_EXTRA_SIZE);
@@ -904,6 +925,75 @@ NODE *node_tree_reinitialize(char *database)
     n = __node_tree_reinitialize(database, n);
     return n->root_link;
 }
+
+NODE *__node_tree_reinitialize_2(char *database, NODE *pn)
+{
+    //Verify number of forward link available.
+    int i = 0;
+    int total_count = 0;
+    char *ptr;
+    long int name;
+    char *node_name = (char *)malloc(PATH_EXTRA_SIZE);
+    sprintf(node_name, "%ld", pn->name);
+    char **node_data = node_config_read_file(database, node_name);
+    free(node_name);
+    NODE *cn;
+
+    while(node_data[i] != '\0')
+    {
+        if(strcmp(node_data[i], "FORWARD")==0)
+        {
+            total_count++;
+        }
+        i++;
+    }
+
+    if(total_count == 0)
+    {
+        i = 0;
+        while(node_data[i] != '\0')
+        {
+            free(node_data[i]);
+            i++;
+        }
+        free(node_data[i]);
+        free(node_data);
+        return pn;
+    }
+
+//    n->num_link = total_count;
+//    n->forward_link = (NODE **)malloc(sizeof(NODE *) * total_count);
+    i = 0;
+    while(node_data[i] != '\0')
+    {
+        if(strcmp(node_data[i], "FORWARD")==0)
+        {
+            name = strtol(node_data[i+2], &ptr,10);
+            free(node_data[i]);
+            free(node_data[i+1]);
+            cn = node_search_by_name(pn->root_link, name);
+            if(cn == NULL)
+                cn = __node_reinitialize(database, name, BRANCH_NODE);      //Reinitialize the Node.
+            node_link(pn, cn);
+            cn = __node_tree_reinitialize_2(database, cn);        //Pass the new node recursively into the same function to attach child node.
+            i = i + 2;
+        }
+        free(node_data[i]);
+        i++;
+    }
+//    free(node_data[i]);
+    free(node_data);
+    return cn->root_link;
+}
+
+NODE *node_tree_reinitialize_2(char *database)
+{
+    NODE *n;
+    n = __node_reinitialize(database, 1, ROOT_NODE);
+    n = __node_tree_reinitialize_2(database, n);
+    return n->root_link;
+}
+
 /*===================Node Libraries(Completed)===========================================*/
 
 

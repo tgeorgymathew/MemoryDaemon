@@ -97,7 +97,7 @@ pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 //Custom header files(High Level)
 #include "database_structure.h"
-#include "storage.h"
+#include "simple_storage.h"
 
 
 #endif // HEADERS_H_INCLUDED
